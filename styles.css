@@ -922,7 +922,11 @@ body {
     flex-direction: column;
     overflow: hidden;
     transform: scale(1);
-    transition: transform var(--transition-smooth);
+    transition: transform var(--transition-smooth, 0.25s), max-width var(--transition-fast, 0.15s);
+}
+
+.modal-container.modal-large {
+    max-width: 820px;
 }
 
 .modal-overlay.hidden .modal-container {
@@ -1400,4 +1404,77 @@ body {
         align-items: stretch;
         gap: 16px;
     }
+}
+
+/* ==========================================================================
+   Modul Ekstraksi & Cropper TTD
+   ========================================================================== */
+
+.extract-editor-container {
+    width: 100%;
+}
+
+.extract-page-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.extract-page-nav span {
+    font-weight: 800;
+    font-size: 14px;
+}
+
+.extract-workspace-wrapper {
+    position: relative;
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: #f3f4f6;
+    overflow: auto;
+    max-height: 350px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.extract-crop-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.extract-canvas {
+    display: block;
+    max-width: 100%;
+}
+
+.extract-crop-box {
+    position: absolute;
+    border: var(--border-width) solid var(--border-color);
+    background: rgba(255, 255, 255, 0.15);
+    cursor: move;
+    width: 160px;
+    height: 80px;
+    top: 30px;
+    left: 30px;
+    box-sizing: border-box;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+}
+
+.extract-resize-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-yellow);
+    border: var(--border-width-sm) solid var(--border-color);
+    right: -8px;
+    bottom: -8px;
+    cursor: se-resize;
+    z-index: 10;
+}
+
+.extract-margin-top {
+    margin-top: 16px;
 }

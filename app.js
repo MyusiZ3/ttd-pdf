@@ -27,6 +27,15 @@ const state = {
     // Image Upload State
     originalUploadedImage: null,
 
+    // Extraction State
+    extractPdfDoc: null,
+    extractPdfBytes: null,
+    extractPageNum: 1,
+    extractTotalPages: 1,
+    extractOriginalImage: null,
+    extractFileType: null,
+    extractImageSrc: null,
+
     // History & Undo/Redo State
     history: [],
     historyIndex: -1
@@ -161,6 +170,60 @@ function setupEventListeners() {
         thresholdVal.textContent = `Ambang Batas: ${threshold}`;
         applyChromaKeyBackgroundRemoval(threshold);
     });
+
+    // Extraction Tab Actions
+    const extractUploadArea = document.getElementById('extractUploadArea');
+    const extractFileInput = document.getElementById('extractFileInput');
+    const extractUploadPlaceholder = document.getElementById('extractUploadPlaceholder');
+
+    if (extractUploadPlaceholder) {
+        extractUploadPlaceholder.addEventListener('click', () => extractFileInput.click());
+    }
+    if (extractUploadArea) {
+        extractUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            extractUploadArea.style.borderColor = 'var(--secondary)';
+        });
+        extractUploadArea.addEventListener('dragleave', () => {
+            extractUploadArea.style.borderColor = 'var(--border-color)';
+        });
+        extractUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            extractUploadArea.style.borderColor = 'var(--border-color)';
+            if (e.dataTransfer.files.length > 0) {
+                handleExtractFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+    }
+    if (extractFileInput) {
+        extractFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleExtractFileSelect(e.target.files[0]);
+            }
+        });
+    }
+
+    const btnResetExtract = document.getElementById('btnResetExtract');
+    if (btnResetExtract) btnResetExtract.addEventListener('click', resetSignatureExtraction);
+
+    const btnSaveExtractedSignature = document.getElementById('btnSaveExtractedSignature');
+    if (btnSaveExtractedSignature) btnSaveExtractedSignature.addEventListener('click', saveExtractedSignature);
+
+    const btnExtractPrevPage = document.getElementById('btnExtractPrevPage');
+    if (btnExtractPrevPage) btnExtractPrevPage.addEventListener('click', () => navigateExtractPage(-1));
+
+    const btnExtractNextPage = document.getElementById('btnExtractNextPage');
+    if (btnExtractNextPage) btnExtractNextPage.addEventListener('click', () => navigateExtractPage(1));
+
+    const extractBgThreshold = document.getElementById('extractBgThreshold');
+    const extractThresholdVal = document.getElementById('extractThresholdVal');
+    if (extractBgThreshold && extractThresholdVal) {
+        extractBgThreshold.addEventListener('input', (e) => {
+            const threshold = parseInt(e.target.value);
+            extractThresholdVal.textContent = `Ambang Batas: ${threshold}`;
+            renderExtractWorkspace();
+        });
+    }
 
     // Update help text dynamically when layer mode changes
     const selectLayerMode = document.getElementById('selectLayerMode');
@@ -690,6 +753,384 @@ function saveUploadedSignature() {
     closeSignatureModal();
     resetSignatureUpload();
     showToast('Tanda tangan berhasil diunggah!', 'success');
+}
+
+// ==========================================================================
+// 4.5 Modul Ekstraksi Tanda Tangan dari Dokumen PDF/Gambar (Interactive Crop & Remove Background)
+// ==========================================================================
+
+function handleExtractFileSelect(file) {
+    if (!file) return;
+    
+    // Reset any previous state first
+    resetSignatureExtraction();
+    
+    // Check if it's a PDF or Image
+    if (file.type === 'application/pdf') {
+        state.extractFileType = 'pdf';
+        
+        showLoader(true, "Membaca Dokumen Ekstraksi...");
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            state.extractPdfBytes = new Uint8Array(e.target.result);
+            
+            // slice to prevent transfer detached buffer issues
+            const loadingTask = pdfjsLib.getDocument({ data: state.extractPdfBytes.slice(0) });
+            loadingTask.promise.then(pdf => {
+                state.extractPdfDoc = pdf;
+                state.extractPageNum = 1;
+                state.extractTotalPages = pdf.numPages;
+                
+                // Show page nav
+                document.getElementById('extractPageNav').classList.remove('hidden');
+                
+                // Show editor workspace
+                document.getElementById('extractUploadPlaceholder').classList.add('hidden');
+                document.getElementById('extractEditorContainer').classList.remove('hidden');
+                document.getElementById('btnResetExtract').classList.remove('hidden');
+                
+                // Enable button save
+                const saveBtn = document.getElementById('btnSaveExtractedSignature');
+                saveBtn.classList.remove('disabled');
+                saveBtn.removeAttribute('disabled');
+                
+                showLoader(false);
+                renderExtractWorkspace();
+                
+                // Bind interactions once when workspace loads
+                initExtractCropInteractions();
+            }).catch(err => {
+                console.error('Extraction PDF Load Error:', err);
+                showLoader(false);
+                showToast('Gagal membaca PDF ekstraksi. Pastikan file valid.', 'error');
+            });
+        };
+        reader.readAsArrayBuffer(file);
+        
+    } else if (file.type.match('image.*')) {
+        state.extractFileType = 'image';
+        
+        showLoader(true, "Membaca Gambar Ekstraksi...");
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                state.extractOriginalImage = img;
+                
+                // Hide page nav (not needed for images)
+                document.getElementById('extractPageNav').classList.add('hidden');
+                
+                // Show editor workspace
+                document.getElementById('extractUploadPlaceholder').classList.add('hidden');
+                document.getElementById('extractEditorContainer').classList.remove('hidden');
+                document.getElementById('btnResetExtract').classList.remove('hidden');
+                
+                // Enable button save
+                const saveBtn = document.getElementById('btnSaveExtractedSignature');
+                saveBtn.classList.remove('disabled');
+                saveBtn.removeAttribute('disabled');
+                
+                showLoader(false);
+                renderExtractWorkspace();
+                
+                // Bind interactions once when workspace loads
+                initExtractCropInteractions();
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    } else {
+        showToast('Tipe file tidak didukung! Pilih PDF atau Gambar.', 'error');
+    }
+}
+
+function resetSignatureExtraction() {
+    state.extractPdfDoc = null;
+    state.extractPdfBytes = null;
+    state.extractPageNum = 1;
+    state.extractTotalPages = 1;
+    state.extractOriginalImage = null;
+    state.extractFileType = null;
+    state.extractImageSrc = null;
+    
+    const fileInput = document.getElementById('extractFileInput');
+    if (fileInput) fileInput.value = '';
+    
+    const placeholder = document.getElementById('extractUploadPlaceholder');
+    const editor = document.getElementById('extractEditorContainer');
+    const resetBtn = document.getElementById('btnResetExtract');
+    const saveBtn = document.getElementById('btnSaveExtractedSignature');
+    
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (editor) editor.classList.add('hidden');
+    if (resetBtn) resetBtn.classList.add('hidden');
+    
+    if (saveBtn) {
+        saveBtn.classList.add('disabled');
+        saveBtn.setAttribute('disabled', 'true');
+    }
+}
+
+function navigateExtractPage(dir) {
+    if (!state.extractPdfDoc) return;
+    
+    const targetPage = state.extractPageNum + dir;
+    if (targetPage < 1 || targetPage > state.extractTotalPages) return;
+    
+    state.extractPageNum = targetPage;
+    renderExtractWorkspace();
+}
+
+function renderExtractWorkspace() {
+    const canvas = document.getElementById('extractCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    const threshold = parseInt(document.getElementById('extractBgThreshold').value || '30');
+    
+    if (state.extractFileType === 'pdf' && state.extractPdfDoc) {
+        document.getElementById('extractPageIndicator').textContent = `Halaman ${state.extractPageNum} dari ${state.extractTotalPages}`;
+        
+        showLoader(true, "Merender Halaman PDF...");
+        state.extractPdfDoc.getPage(state.extractPageNum).then(page => {
+            // Render viewport with high quality
+            const viewport = page.getViewport({ scale: 1.5 });
+            
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            
+            page.render(renderContext).promise.then(() => {
+                // Apply transparency/chroma key to the rendered page pixels if threshold > 0
+                if (threshold > 0) {
+                    applyExtractChromaKey(canvas, ctx, threshold);
+                }
+                showLoader(false);
+            });
+        }).catch(err => {
+            console.error("Gagal rendering extract page:", err);
+            showLoader(false);
+        });
+        
+    } else if (state.extractFileType === 'image' && state.extractOriginalImage) {
+        const img = state.extractOriginalImage;
+        
+        // Fit image nicely into preview canvas
+        let targetWidth = img.width;
+        let targetHeight = img.height;
+        const maxDimension = 700;
+        
+        if (img.width > maxDimension || img.height > maxDimension) {
+            if (img.width > img.height) {
+                targetWidth = maxDimension;
+                targetHeight = (img.height * maxDimension) / img.width;
+            } else {
+                targetHeight = maxDimension;
+                targetWidth = (img.width * maxDimension) / img.height;
+            }
+        }
+        
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        
+        if (threshold > 0) {
+            applyExtractChromaKey(canvas, ctx, threshold);
+        }
+    }
+}
+
+function applyExtractChromaKey(canvas, ctx, threshold) {
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    
+    // Pixel-level keying to remove white backgrounds seamlessly
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        
+        // Find distance to pure white
+        const diff = 255 - Math.min(r, g, b);
+        
+        if (diff < threshold) {
+            data[i+3] = 0; // Transparent
+        } else if (diff < threshold * 2.5) {
+            // Feather transparency smoothly
+            const ratio = (diff - threshold) / (threshold * 1.5);
+            data[i+3] = Math.max(0, Math.min(255, ratio * 255));
+        }
+    }
+    
+    ctx.putImageData(imgData, 0, 0);
+}
+
+// Global variable to keep track of crop box state
+let extractCropState = {
+    isDraggingBox: false,
+    isResizingBox: false,
+    startX: 0,
+    startY: 0,
+    startLeft: 0,
+    startTop: 0,
+    startWidth: 0,
+    startHeight: 0
+};
+
+function initExtractCropInteractions() {
+    const cropBox = document.getElementById('extractCropBox');
+    const resizeHandle = document.getElementById('extractResizeHandle');
+    const cropWrapper = document.getElementById('extractCropWrapper');
+    
+    if (!cropBox || !resizeHandle || !cropWrapper) return;
+    
+    // Set default initial crop box position and size
+    cropBox.style.width = '160px';
+    cropBox.style.height = '80px';
+    cropBox.style.left = '30px';
+    cropBox.style.top = '30px';
+    
+    // Pointerdown for dragging
+    cropBox.addEventListener('pointerdown', (e) => {
+        if (e.target === resizeHandle) return; // ignore resize handle clicks
+        
+        e.preventDefault();
+        cropBox.setPointerCapture(e.pointerId);
+        extractCropState.isDraggingBox = true;
+        
+        extractCropState.startX = e.clientX;
+        extractCropState.startY = e.clientY;
+        extractCropState.startLeft = parseInt(cropBox.style.left || '0');
+        extractCropState.startTop = parseInt(cropBox.style.top || '0');
+    });
+    
+    // Pointerdown for resizing
+    resizeHandle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resizeHandle.setPointerCapture(e.pointerId);
+        extractCropState.isResizingBox = true;
+        
+        extractCropState.startX = e.clientX;
+        extractCropState.startY = e.clientY;
+        extractCropState.startWidth = parseInt(cropBox.style.width || '100');
+        extractCropState.startHeight = parseInt(cropBox.style.height || '50');
+    });
+    
+    // Pointermove for both
+    cropBox.addEventListener('pointermove', (e) => {
+        if (extractCropState.isDraggingBox) {
+            const dx = e.clientX - extractCropState.startX;
+            const dy = e.clientY - extractCropState.startY;
+            
+            let newLeft = extractCropState.startLeft + dx;
+            let newTop = extractCropState.startTop + dy;
+            
+            // Constrain within cropWrapper/canvas bounds
+            const maxLeft = cropWrapper.clientWidth - parseInt(cropBox.style.width);
+            const maxTop = cropWrapper.clientHeight - parseInt(cropBox.style.height);
+            
+            newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+            newTop = Math.max(0, Math.min(newTop, maxTop));
+            
+            cropBox.style.left = newLeft + 'px';
+            cropBox.style.top = newTop + 'px';
+        }
+    });
+    
+    resizeHandle.addEventListener('pointermove', (e) => {
+        if (extractCropState.isResizingBox) {
+            const dx = e.clientX - extractCropState.startX;
+            const dy = e.clientY - extractCropState.startY;
+            
+            let newWidth = extractCropState.startWidth + dx;
+            let newHeight = extractCropState.startHeight + dy;
+            
+            // Constrain min size
+            newWidth = Math.max(40, newWidth);
+            newHeight = Math.max(20, newHeight);
+            
+            // Constrain within wrapper bounds
+            const left = parseInt(cropBox.style.left || '0');
+            const top = parseInt(cropBox.style.top || '0');
+            
+            if (left + newWidth > cropWrapper.clientWidth) {
+                newWidth = cropWrapper.clientWidth - left;
+            }
+            if (top + newHeight > cropWrapper.clientHeight) {
+                newHeight = cropWrapper.clientHeight - top;
+            }
+            
+            cropBox.style.width = newWidth + 'px';
+            cropBox.style.height = newHeight + 'px';
+        }
+    });
+    
+    // Pointerup release capture
+    cropBox.addEventListener('pointerup', (e) => {
+        if (extractCropState.isDraggingBox) {
+            extractCropState.isDraggingBox = false;
+            cropBox.releasePointerCapture(e.pointerId);
+        }
+    });
+    
+    resizeHandle.addEventListener('pointerup', (e) => {
+        if (extractCropState.isResizingBox) {
+            extractCropState.isResizingBox = false;
+            resizeHandle.releasePointerCapture(e.pointerId);
+        }
+    });
+}
+
+function saveExtractedSignature() {
+    const canvas = document.getElementById('extractCanvas');
+    const cropBox = document.getElementById('extractCropBox');
+    const cropWrapper = document.getElementById('extractCropWrapper');
+    
+    if (!canvas || !cropBox || !cropWrapper) return;
+    
+    // Get crop dimensions
+    const left = parseInt(cropBox.style.left || '0');
+    const top = parseInt(cropBox.style.top || '0');
+    const width = parseInt(cropBox.style.width || '100');
+    const height = parseInt(cropBox.style.height || '50');
+    
+    // Check if bounds are correct
+    if (width <= 0 || height <= 0) {
+        showToast('Pilih area crop yang valid!', 'error');
+        return;
+    }
+    
+    // Render cropped portion to temporary canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // We need to scale crop coordinates to match the actual backing store canvas resolution (which is at 100% css width but fits scale)
+    const scaleX = canvas.width / cropWrapper.clientWidth;
+    const scaleY = canvas.height / cropWrapper.clientHeight;
+    
+    tempCtx.drawImage(
+        canvas,
+        left * scaleX, top * scaleY, width * scaleX, height * scaleY,
+        0, 0, width, height
+    );
+    
+    // Trim empty boundaries around cropped area to get a perfectly aligned bounding box!
+    const trimmedDataURL = trimCanvas(tempCanvas);
+    
+    // Save to localStorage collection
+    saveSignatureToCollection(trimmedDataURL);
+    
+    closeSignatureModal();
+    resetSignatureExtraction();
+    showToast('Tanda tangan berhasil diambil dari dokumen!', 'success');
 }
 
 // ==========================================================================
@@ -1395,6 +1836,7 @@ function closeSignatureModal() {
     // Reset states
     clearSignatureCanvas();
     resetSignatureUpload();
+    resetSignatureExtraction();
 }
 
 function switchTab(tabId) {
@@ -1415,6 +1857,16 @@ function switchTab(tabId) {
             content.classList.add('hidden');
         }
     });
+
+    // Toggle modal size for wider workspace on extraction tab
+    const modalContainer = document.querySelector('#signatureModal .modal-container');
+    if (modalContainer) {
+        if (tabId === 'tab-extract') {
+            modalContainer.classList.add('modal-large');
+        } else {
+            modalContainer.classList.remove('modal-large');
+        }
+    }
     
     // Redraw signature layout coordinates when tab is drawn to avoid canvas width mismatches
     if (tabId === 'tab-draw') {
