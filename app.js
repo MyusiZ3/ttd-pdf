@@ -1079,7 +1079,21 @@ function initExtractCropInteractions() {
         }
     });
     
+    cropBox.addEventListener('pointercancel', (e) => {
+        if (extractCropState.isDraggingBox) {
+            extractCropState.isDraggingBox = false;
+            cropBox.releasePointerCapture(e.pointerId);
+        }
+    });
+    
     resizeHandle.addEventListener('pointerup', (e) => {
+        if (extractCropState.isResizingBox) {
+            extractCropState.isResizingBox = false;
+            resizeHandle.releasePointerCapture(e.pointerId);
+        }
+    });
+    
+    resizeHandle.addEventListener('pointercancel', (e) => {
         if (extractCropState.isResizingBox) {
             extractCropState.isResizingBox = false;
             resizeHandle.releasePointerCapture(e.pointerId);
