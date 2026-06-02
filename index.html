@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignFlow - Pembubuhan Tanda Tangan PDF Premium</title>
+    <!-- Meta SEO -->
+    <meta name="description" content="Bubuhkan tanda tangan digital Anda ke dalam file PDF secara aman, mudah, dan premium. Gambar langsung tanda tangan Anda atau unggah gambar dan hapus latar belakang secara otomatis.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- PDF.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <!-- PDF-Lib CDN -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+    <!-- App Glow Effects -->
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="logo-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#a855f7"/>
+                                <stop offset="1" stop-color="#06b6d4"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1>Sign<span>Flow</span></h1>
+            </div>
+            
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Siap Digunakan</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-workspace">
+            <!-- Sidebar: Tools and Actions -->
+            <aside class="app-sidebar hidden" id="sidebar">
+                <!-- Document Info Card -->
+                <div class="sidebar-card doc-info-card">
+                    <div class="card-header">
+                        <span class="card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        </span>
+                        <h3>Informasi Dokumen</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="doc-name" id="docName">document.pdf</p>
+                        <div class="doc-stats">
+                            <span id="docPages">0 Halaman</span>
+                            <span class="bullet">•</span>
+                            <span id="docSize">0 KB</span>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="btnChangeDoc">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                            Ganti Dokumen
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Signatures Card -->
+                <div class="sidebar-card signatures-card">
+                    <div class="card-header">
+                        <span class="card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                        </span>
+                        <h3>Koleksi TTD</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="signatures-grid" id="savedSignaturesGrid">
+                            <!-- Saved signatures will populate here -->
+                            <div class="signature-placeholder" id="noSavedSignatures">
+                                Belum ada tanda tangan. Klik tombol di bawah untuk membuat.
+                            </div>
+                        </div>
+                        <button class="btn btn-primary w-full" id="btnOpenSignatureModal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Buat Tanda Tangan
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Layer Settings Card -->
+                <div class="sidebar-card layering-card">
+                    <div class="card-header">
+                        <span class="card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                        </span>
+                        <h3>Metode Lapisan TTD</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+                            <label for="selectLayerMode" style="font-size: 12px; color: var(--text-muted);">Metode Pembubuhan:</label>
+                            <select id="selectLayerMode" class="form-control" style="width: 100%; background: hsla(223, 47%, 7%, 0.6); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px; border-radius: var(--radius-sm); font-size: 13px; font-family: var(--font-sans); outline: none;">
+                                <option value="annot" selected>Tumpuk di Atas (Rekomendasi E-Meterai)</option>
+                                <option value="standard">Gambar Langsung ke PDF (Standar)</option>
+                                <option value="flatten">Ratakan Form & Gambar (Flatten)</option>
+                            </select>
+                            <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 4px;" id="layerModeHelpText">
+                                Mode "Tumpuk di Atas" menempatkan TTD pada lapisan interaktif terluar, mencegah TTD tertimbun di belakang materai elektronik/stempel.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Element Manager Card -->
+                <div class="sidebar-card elements-card">
+                    <div class="card-header">
+                        <span class="card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        </span>
+                        <h3>Elemen Terpasang</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="elements-list" id="placedElementsList">
+                            <div class="elements-placeholder">
+                                Belum ada tanda tangan yang ditempel di halaman PDF.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Export Action -->
+                <div class="sidebar-actions">
+                    <button class="btn btn-gradient w-full" id="btnSavePdf">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Simpan PDF Hasil
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Viewer Container: PDF & Upload Area -->
+            <section class="viewer-container">
+                <!-- Drop Zone (Initial State) -->
+                <div class="upload-dropzone" id="uploadDropzone">
+                    <div class="dropzone-content">
+                        <div class="upload-icon">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="url(#upload-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M17 8L12 3L7 8" stroke="url(#upload-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 3V15" stroke="url(#upload-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <defs>
+                                    <linearGradient id="upload-grad" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                                        <stop stop-color="#a855f7"/>
+                                        <stop offset="1" stop-color="#06b6d4"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+                        <h2>Unggah Dokumen PDF Anda</h2>
+                        <p class="dropzone-subtitle">Seret & letakkan file PDF Anda di sini, atau telusuri berkas dari komputer Anda</p>
+                        
+                        <div class="file-input-wrapper">
+                            <button class="btn btn-gradient">Pilih File PDF</button>
+                            <input type="file" id="pdfFileInput" accept="application/pdf">
+                        </div>
+                        
+                        <div class="security-badge">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <span>Pemrosesan lokal di browser Anda. File tidak diunggah ke server mana pun demi privasi & keamanan.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PDF Renderer (Active State) -->
+                <div class="pdf-viewer-wrapper hidden" id="pdfViewerWrapper">
+                    <!-- Custom Toolbar -->
+                    <div class="viewer-toolbar">
+                        <div class="toolbar-left">
+                            <span class="file-badge">PDF</span>
+                            <span class="toolbar-filename" id="toolbarFilename">document.pdf</span>
+                        </div>
+                        <div class="toolbar-center">
+                            <!-- Zoom Controls -->
+                            <div class="zoom-controls">
+                                <button class="btn-icon" id="btnZoomOut" title="Perkecil">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
+                                <span class="zoom-value" id="zoomVal">100%</span>
+                                <button class="btn-icon" id="btnZoomIn" title="Perbesar">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-secondary btn-sm" id="btnResetViewer">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Page Container -->
+                    <div class="pdf-pages-container" id="pdfPagesContainer">
+                        <!-- Pages rendered as canvases with coordinate overlays will go here -->
+                        <div class="viewer-loading" id="viewerLoading">
+                            <div class="spinner"></div>
+                            <p>Merender Halaman PDF...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Signature Creator -->
+    <div class="modal-overlay hidden" id="signatureModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2>Buat Tanda Tangan</h2>
+                <button class="btn-close-modal" id="btnCloseSignatureModal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <!-- Tab Selector -->
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="tab-draw">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                    Tulis Tangan (Draw)
+                </button>
+                <button class="tab-btn" data-tab="tab-upload">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Unggah Gambar (Upload)
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Tab 1: Draw Signature -->
+                <div class="tab-content" id="tab-draw">
+                    <div class="signature-canvas-wrapper">
+                        <canvas id="signatureCanvas" width="600" height="300"></canvas>
+                        <div class="canvas-hint">Tulis tanda tangan Anda di dalam area putih di atas</div>
+                    </div>
+                    
+                    <div class="canvas-controls">
+                        <div class="control-group">
+                            <label>Warna Pena</label>
+                            <div class="color-options">
+                                <button class="color-dot active" data-color="#000000" style="background-color: #000000;" title="Hitam"></button>
+                                <button class="color-dot" data-color="#0000ff" style="background-color: #1e40af;" title="Biru"></button>
+                                <button class="color-dot" data-color="#ff0000" style="background-color: #b91c1c;" title="Merah"></button>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <label>Ketebalan Goresan</label>
+                            <div class="thickness-slider">
+                                <input type="range" id="brushThickness" min="1" max="10" value="3">
+                                <span id="thicknessVal">3px</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-row">
+                        <button class="btn btn-secondary" id="btnClearCanvas">Bersihkan</button>
+                        <div class="btn-right-group">
+                            <button class="btn btn-secondary modal-cancel">Batal</button>
+                            <button class="btn btn-gradient" id="btnSaveDrawSignature">Simpan TTD</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Upload Signature Image -->
+                <div class="tab-content hidden" id="tab-upload">
+                    <div class="upload-area" id="sigUploadArea">
+                        <div class="upload-sig-placeholder" id="sigUploadPlaceholder">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <p>Klik untuk memilih gambar atau seret file di sini</p>
+                            <span class="file-limit">Mendukung PNG, JPG, JPEG, WebP</span>
+                            <input type="file" id="sigImageInput" accept="image/*" class="hidden">
+                        </div>
+                        
+                        <div class="sig-preview-container hidden" id="sigPreviewContainer">
+                            <div class="canvas-preview-wrapper">
+                                <canvas id="sigPreviewCanvas"></canvas>
+                            </div>
+                            <div class="bg-remove-controls">
+                                <div class="bg-remove-header">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m22 2-7 7"></path><path d="M5.47 5.47 12 12m0 0 6.53 6.53M12 12l6.53-6.53M12 12l-6.53 6.53"></path></svg>
+                                    <span>Hapus Latar Belakang Putih (Kertas)</span>
+                                </div>
+                                <div class="slider-wrapper">
+                                    <input type="range" id="bgThreshold" min="0" max="255" value="20">
+                                    <span id="thresholdVal">Ambang Batas: 20</span>
+                                </div>
+                                <p class="control-hint">Sesuaikan slider jika goresan tanda tangan tampak terpotong atau latar belakang kurang bersih.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-row">
+                        <button class="btn btn-secondary hidden" id="btnResetUploadSig">Ganti Gambar</button>
+                        <div class="btn-right-group ml-auto">
+                            <button class="btn btn-secondary modal-cancel">Batal</button>
+                            <button class="btn btn-gradient disabled" id="btnSaveUploadedSignature" disabled>Simpan TTD</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay Loading -->
+    <div class="modal-overlay hidden" id="processingOverlay">
+        <div class="loader-box">
+            <div class="spinner spinner-large"></div>
+            <h3 id="processingText">Membuat Dokumen PDF Baru...</h3>
+            <p>Harap tunggu sebentar, kami sedang menempelkan tanda tangan Anda dengan presisi.</p>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
