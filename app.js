@@ -25,7 +25,11 @@ const state = {
     drawingPathPoints: [],
     
     // Image Upload State
-    originalUploadedImage: null
+    originalUploadedImage: null,
+
+    // History & Undo/Redo State
+    history: [],
+    historyIndex: -1
 };
 
 // ==========================================================================
@@ -78,6 +82,10 @@ function setupEventListeners() {
     // Zoom Actions
     document.getElementById('btnZoomIn').addEventListener('click', () => adjustZoom(0.1));
     document.getElementById('btnZoomOut').addEventListener('click', () => adjustZoom(-0.1));
+
+    // History Actions
+    document.getElementById('btnUndo').addEventListener('click', undo);
+    document.getElementById('btnRedo').addEventListener('click', redo);
 
     // Open Signature Creator Modal
     document.getElementById('btnOpenSignatureModal').addEventListener('click', openSignatureModal);
@@ -243,6 +251,11 @@ async function renderPdfPages() {
 
     state.placedElements = [];
     updatePlacedElementsList();
+
+    // Initialize history stack on PDF document load
+    state.history = [[]];
+    state.historyIndex = 0;
+    updateHistoryButtons();
 
     const pagesCount = state.pdfDocument.numPages;
     
@@ -834,6 +847,21 @@ function placeSignatureOnActivePage(imageSrc) {
         });
         sigEl.appendChild(dupBtn);
 
+        // Rotate bubble
+        const rotBtn = document.createElement('button');
+        rotBtn.className = 'action-bubble bubble-rotate';
+        rotBtn.title = 'Putar 90°';
+        rotBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+        `;
+        rotBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            rotatePlacedElement(elementId);
+        });
+        sigEl.appendChild(rotBtn);
+
         // Resize circle handle
         const resizeHandle = document.createElement('div');
         resizeHandle.className = 'resize-handle';
@@ -853,6 +881,7 @@ function placeSignatureOnActivePage(imageSrc) {
             aspectRatio: imageAspectRatio
         };
         state.placedElements.push(elObj);
+        saveHistoryState();
         
         // Bind interaction logic
         setupDragAndResize(sigEl, elObj, overlay);
@@ -968,21 +997,24 @@ function setupDragAndResize(domEl, elObj, overlay) {
         if (isResizing) {
             const dx = e.clientX - startPointerX;
             
+            // Read active ratio dynamically in case it was rotated
+            const currentAspectRatio = elObj.aspectRatio || (elObj.width / elObj.height);
+            
             // Keep aspect ratio
             let newW = startW + dx;
-            let newH = newW / aspectRatio;
+            let newH = newW / currentAspectRatio;
             
             // Constrain bounds (min 40px, max to match page edges)
             newW = Math.max(40, newW);
-            newH = newW / aspectRatio;
+            newH = newW / currentAspectRatio;
             
             if (elObj.x + newW > overlay.clientWidth) {
                 newW = overlay.clientWidth - elObj.x;
-                newH = newW / aspectRatio;
+                newH = newW / currentAspectRatio;
             }
             if (elObj.y + newH > overlay.clientHeight) {
                 newH = overlay.clientHeight - elObj.y;
-                newW = newH * aspectRatio;
+                newW = newH * currentAspectRatio;
             }
             
             elObj.width = newW;
@@ -998,6 +1030,7 @@ function setupDragAndResize(domEl, elObj, overlay) {
         if (isDragging) {
             isDragging = false;
             domEl.releasePointerCapture(e.pointerId);
+            saveHistoryState();
         }
     });
 
@@ -1005,6 +1038,7 @@ function setupDragAndResize(domEl, elObj, overlay) {
         if (isResizing) {
             isResizing = false;
             resizeHandle.releasePointerCapture(e.pointerId);
+            saveHistoryState();
         }
     });
 }
@@ -1046,6 +1080,7 @@ function removePlacedElement(id) {
     }
     
     updatePlacedElementsList();
+    saveHistoryState();
     showToast('Tanda tangan dihapus dari halaman.', 'info');
 }
 
@@ -1109,6 +1144,21 @@ function duplicatePlacedElement(id) {
     });
     sigEl.appendChild(dupBtn);
 
+    // Rotate bubble
+    const rotBtn = document.createElement('button');
+    rotBtn.className = 'action-bubble bubble-rotate';
+    rotBtn.title = 'Putar 90°';
+    rotBtn.innerHTML = `
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+    `;
+    rotBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rotatePlacedElement(newId);
+    });
+    sigEl.appendChild(rotBtn);
+
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'resize-handle';
     sigEl.appendChild(resizeHandle);
@@ -1127,6 +1177,7 @@ function duplicatePlacedElement(id) {
     };
     
     state.placedElements.push(elObj);
+    saveHistoryState();
     setupDragAndResize(sigEl, elObj, overlay);
     setActiveElement(newId);
     updatePlacedElementsList();
@@ -1421,4 +1472,208 @@ function showProcessingOverlay(show, message = "Membuat Dokumen PDF Baru...") {
     } else {
         overlay.classList.add('hidden');
     }
+}
+
+// ==========================================================================
+// 8. Sistem Riwayat (History - Undo/Redo) & Rotasi Tanda Tangan
+// ==========================================================================
+
+function rotateImage90Degrees(imageSrc) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalHeight;
+            canvas.height = img.naturalWidth;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                resolve(imageSrc);
+                return;
+            }
+            
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+            ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+            
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = imageSrc;
+    });
+}
+
+async function rotatePlacedElement(id) {
+    const elIndex = state.placedElements.findIndex(el => el.id === id);
+    if (elIndex === -1) return;
+    
+    const el = state.placedElements[elIndex];
+    
+    // Rotate the image source using pixel-based canvas transformation
+    const rotatedSrc = await rotateImage90Degrees(el.imageSrc);
+    
+    // Swap dimensions
+    const oldWidth = el.width;
+    const oldHeight = el.height;
+    
+    el.imageSrc = rotatedSrc;
+    el.width = oldHeight;
+    el.height = oldWidth;
+    el.aspectRatio = 1 / el.aspectRatio; // Reciprocal aspect ratio
+    
+    // Update DOM
+    const sigEl = document.querySelector(`.draggable-signature[data-id="${id}"]`);
+    if (sigEl) {
+        sigEl.style.width = el.width + 'px';
+        sigEl.style.height = el.height + 'px';
+        const img = sigEl.querySelector('img');
+        if (img) img.src = rotatedSrc;
+    }
+    
+    saveHistoryState();
+    showToast('Tanda tangan diputar 90°', 'info');
+}
+
+function saveHistoryState() {
+    // If the index is not at the end of the history stack, discard subsequent states
+    if (state.historyIndex < state.history.length - 1) {
+        state.history = state.history.slice(0, state.historyIndex + 1);
+    }
+    
+    // Deep clone the placedElements array
+    const snapshot = JSON.parse(JSON.stringify(state.placedElements));
+    state.history.push(snapshot);
+    state.historyIndex++;
+    
+    // Limit history stack size to 50 entries
+    if (state.history.length > 50) {
+        state.history.shift();
+        state.historyIndex--;
+    }
+    
+    updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+    const btnUndo = document.getElementById('btnUndo');
+    const btnRedo = document.getElementById('btnRedo');
+    
+    if (btnUndo) {
+        btnUndo.disabled = state.historyIndex <= 0;
+        if (state.historyIndex <= 0) {
+            btnUndo.classList.add('disabled');
+        } else {
+            btnUndo.classList.remove('disabled');
+        }
+    }
+    
+    if (btnRedo) {
+        btnRedo.disabled = state.historyIndex >= state.history.length - 1;
+        if (state.historyIndex >= state.history.length - 1) {
+            btnRedo.classList.add('disabled');
+        } else {
+            btnRedo.classList.remove('disabled');
+        }
+    }
+}
+
+function undo() {
+    if (state.historyIndex <= 0) return;
+    
+    state.historyIndex--;
+    applyHistoryState(state.history[state.historyIndex]);
+}
+
+function redo() {
+    if (state.historyIndex >= state.history.length - 1) return;
+    
+    state.historyIndex++;
+    applyHistoryState(state.history[state.historyIndex]);
+}
+
+function applyHistoryState(elementsSnapshot) {
+    // 1. Update elements array
+    state.placedElements = JSON.parse(JSON.stringify(elementsSnapshot));
+    
+    // 2. Remove all current interactive elements from DOM
+    document.querySelectorAll('.draggable-signature').forEach(el => el.remove());
+    
+    // 3. Re-render each element from snapshot
+    state.placedElements.forEach(el => {
+        const overlay = document.querySelector(`#page-wrapper-${el.pageNum} .page-overlay-container`);
+        if (!overlay) return;
+        
+        // Recreate sigEl
+        const sigEl = document.createElement('div');
+        sigEl.className = 'draggable-signature';
+        sigEl.setAttribute('data-id', el.id);
+        sigEl.style.width = el.width + 'px';
+        sigEl.style.height = el.height + 'px';
+        sigEl.style.left = el.x + 'px';
+        sigEl.style.top = el.y + 'px';
+        
+        const img = document.createElement('img');
+        img.src = el.imageSrc;
+        sigEl.appendChild(img);
+        
+        // Delete bubble
+        const delBtn = document.createElement('button');
+        delBtn.className = 'action-bubble bubble-delete';
+        delBtn.title = 'Hapus';
+        delBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        `;
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removePlacedElement(el.id);
+        });
+        sigEl.appendChild(delBtn);
+        
+        // Duplicate bubble
+        const dupBtn = document.createElement('button');
+        dupBtn.className = 'action-bubble bubble-duplicate';
+        dupBtn.title = 'Duplikat';
+        dupBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        `;
+        dupBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            duplicatePlacedElement(el.id);
+        });
+        sigEl.appendChild(dupBtn);
+
+        // Rotate bubble
+        const rotBtn = document.createElement('button');
+        rotBtn.className = 'action-bubble bubble-rotate';
+        rotBtn.title = 'Putar 90°';
+        rotBtn.innerHTML = `
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+        `;
+        rotBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            rotatePlacedElement(el.id);
+        });
+        sigEl.appendChild(rotBtn);
+        
+        // Resize circle handle
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'resize-handle';
+        sigEl.appendChild(resizeHandle);
+        
+        overlay.appendChild(sigEl);
+        
+        // Bind interactions
+        setupDragAndResize(sigEl, el, overlay);
+    });
+    
+    deselectAllElements();
+    updatePlacedElementsList();
+    updateHistoryButtons();
 }
